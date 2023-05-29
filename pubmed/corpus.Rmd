@@ -1,0 +1,148 @@
+---
+title: "Sampling high impact articles doing enrichment analysis in pubmed"
+author: "Survey enrichment team"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+    fig_width: 5
+    fig_height: 5
+theme: cosmo
+---
+
+Source: https://github.com/markziemann/SurveyEnrichment2/pubmed
+
+## Introduction
+
+Enrichment analysis commonly suffers from statistical problems and poor reporting, making the findings
+irreproducible.
+Here we are investigating the methodology of some high impact articles that have conducted enrichment
+analysis.
+In order to highlight these problematic articles, we need to collect a corpus of them to screen.
+A list of pubmed articles cting DAVID was collected.
+The SJR (Scimago Journal Rank) for prominent journals was also collected.
+These will be merged and high impact enrichment articles will be curated.
+
+```{r,libs}
+
+library("kableExtra")
+
+```
+
+## Load data
+
+SJR data were downloaded from [here](https://www.scimagojr.com/journalrank.php?min=200&min_type=cd).
+
+Pubmed data were downloaded from the "cited by" pages for PMID [19131956](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed_citedin&from_uid=19131956) and [35325185](https://pubmed.ncbi.nlm.nih.gov/?linkname=pubmed_pubmed_citedin&from_uid=35325185).
+The data were downloaded in "Pubmed Format".
+
+Obtained 2023-05-29.
+
+```{r,load1}
+
+sjr <- read.csv("scimagojr_2022.csv",header=TRUE,sep=";")
+colnames(sjr)
+
+```
+
+Need to clean some data.
+Removing all data except the ISSN and the PMID.
+
+```{bash,clean1}
+
+tr '\r' '\n' < pubmed-19131956-set.txt \
+| egrep '(^PMID|^IS)' \
+| grep -v "Print" \
+| grep -v "Link" \
+| tr -d ' ' \
+| sed 's/-//2' \
+| cut -d '-' -f2 \
+| cut -d '(' -f1 \
+| sed 's/$/\n/' \
+| grep -v ^$ \
+| paste - - > tmp1.tsv
+
+tr '\r' '\n' < pubmed-35325185-set.txt \
+| egrep '(^PMID|^IS)' \
+| grep -v "Print" \
+| grep -v "Link" \
+| tr -d ' ' \
+| sed 's/-//2' \
+| cut -d '-' -f2 \
+| cut -d '(' -f1 \
+| sed 's/$/\n/' \
+| grep -v ^$ \
+| paste - - > tmp2.tsv
+
+```
+
+Now it should be possible to load in to R.
+
+```{r,load2}
+
+pm1 <- read.table("tmp1.tsv",header=FALSE)
+colnames(pm1) <- c("PMID","ISSN")
+
+pm2 <- read.table("tmp2.tsv",header=FALSE)
+colnames(pm2) <- c("PMID","ISSN")
+
+```
+
+## Merge
+
+First need to get the electronic ISSN, then cut down the dataset to
+include just the eISSN and the SJR.
+
+```{r,merge1}
+
+rev1 <- lapply(sjr$Issn , function(x) {intToUtf8(rev(utf8ToInt(x)))} )
+rev1 <- do.call(rbind,rev1)
+rev1 <- sapply(strsplit(rev1," "),"[[",1)
+issn <- lapply(rev1 , function(x) {intToUtf8(rev(utf8ToInt(x)))} )
+issn <- unlist(issn)
+sjr$issn <- issn
+
+sjr2 <- sjr[,c("SJR","issn")]
+
+m1 <- merge(sjr2,pm1,by.x="issn",by.y="ISSN")
+m2 <- merge(sjr2,pm2,by.x="issn",by.y="ISSN")
+
+
+m1$SJR <- as.numeric(gsub(",",".",m1$SJR))
+m2$SJR <- as.numeric(gsub(",",".",m2$SJR))
+
+```
+
+Histogram and filter.
+
+```{r,hist1}
+
+m <- rbind(m1,m2)
+m <- unique(m)
+
+m <- m[order(-m$SJR),]
+
+hist(m$SJR)
+
+nrow(subset(m,SJR>5))
+nrow(subset(m,SJR>10))
+nrow(subset(m,SJR>15))
+
+head(m,50) %>%
+  kbl(caption="top high impact articles describing enrichment analysis") %>%
+  kable_paper("hover",full_width=FALSE)
+
+write.table(m,file="corpus.tsv",row.names=FALSE)
+
+```
+
+## Session Information
+
+```{r,session}
+
+sessionInfo()
+
+```
+
