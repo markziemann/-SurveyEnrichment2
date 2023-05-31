@@ -117,18 +117,25 @@ m2$SJR <- as.numeric(gsub(",",".",m2$SJR))
 
 Histogram and filter.
 
+We will remove any papers published before 2020.
+
+We will remove papers with SJR less than 5.
+
 ```{r,hist1}
 
 m <- rbind(m1,m2)
 m <- unique(m)
-
 m <- m[order(-m$SJR),]
 
-hist(m$SJR)
+# remove papers pre 2020
+m <- m[which(as.numeric(m$PMID)>32000000),]
 
+hist(m$SJR)
 nrow(subset(m,SJR>5))
 nrow(subset(m,SJR>10))
 nrow(subset(m,SJR>15))
+
+m <- subset(m,SJR>5)
 
 head(m,50) %>%
   kbl(caption="top high impact articles describing enrichment analysis") %>%
